@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Color Grouper</title>
 
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@1,700&display=swap" rel="stylesheet">
+
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#4a7bff">
@@ -584,7 +589,7 @@
   .switch input:checked + .slider { background: #4a7bff; }
   .switch input:checked + .slider::before { transform: translateX(20px); }
 
-  /* Mood checkbox in header */
+  /* Mood checkbox + editable word in header */
   .mood-check-label {
     display: flex;
     align-items: center;
@@ -604,21 +609,26 @@
     flex-shrink: 0;
   }
 
-  /* Mood word in modal (no toggle needed there) */
-  .mood-display {
+  #mood-input {
+    display: none;
+    width: 88px;
     font-size: 13px;
-    color: rgba(255,255,255,0.6);
-    letter-spacing: 0.3px;
+    font-style: italic;
+    font-family: Georgia, 'Times New Roman', serif;
+    border: none;
+    border-bottom: 1.5px solid #bbb;
+    background: transparent;
+    color: #222;
+    padding: 1px 3px;
+    outline: none;
+    transition: border-color 0.15s;
   }
 
-  .mood-display strong {
-    color: #fff;
-    font-style: italic;
-    font-size: 15px;
-  }
+  #mood-input:focus { border-bottom-color: #4a7bff; }
 
   @media (max-width: 640px) {
     .mood-check-label { font-size: 12px; gap: 6px; }
+    #mood-input { width: 72px; font-size: 12px; }
   }
 </style>
 </head>
@@ -644,8 +654,9 @@
       </div>
       <label class="mood-check-label">
         <input type="checkbox" id="mood-toggle">
-        Add mood text
+        Add mood
       </label>
+      <input type="text" id="mood-input" placeholder="word…" maxlength="20">
       <button class="collage-btn" id="collage-btn" style="display:none" disabled>0 / 4 selected</button>
     </div>
   </div>
@@ -671,7 +682,6 @@
 
 <div id="collage-modal">
   <img id="collage-preview" alt="Collage preview">
-  <div class="mood-display">Mood: <strong id="mood-word">—</strong></div>
   <div class="modal-actions">
     <button class="download-btn" id="download-btn">Download JPG</button>
     <button class="modal-close" id="modal-close">Close</button>
@@ -723,9 +733,6 @@ const MOOD_MAP = {
 let photos = [];
 let selected = new Set();
 let collageMode  = 4;
-let moodEnabled  = false;
-let baseDataUrl  = null; // collage without mood overlay
-let moodDataUrl  = null; // collage with mood overlay
 
 // --- DOM ---
 const dropZone       = document.getElementById('drop-zone');
@@ -745,8 +752,8 @@ const downloadBtn    = document.getElementById('download-btn');
 const modalClose     = document.getElementById('modal-close');
 const collageCanvas  = document.getElementById('collage-canvas');
 const collageCtx     = collageCanvas.getContext('2d');
-const moodToggle     = document.getElementById('mood-toggle');
-const moodWordEl     = document.getElementById('mood-word');
+const moodToggle = document.getElementById('mood-toggle');
+const moodInput  = document.getElementById('mood-input');
 
 // --- drag & drop + pickers ---
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
@@ -768,8 +775,13 @@ downloadBtn.addEventListener('click', downloadCollage);
 modalClose.addEventListener('click', () => collageModal.classList.remove('open'));
 collageModal.addEventListener('click', e => { if (e.target === collageModal) collageModal.classList.remove('open'); });
 moodToggle.addEventListener('change', () => {
-  moodEnabled = moodToggle.checked;
-  if (baseDataUrl) collagePreview.src = moodEnabled ? moodDataUrl : baseDataUrl;
+  if (moodToggle.checked) {
+    moodInput.value = getMoodFromSelection();
+    moodInput.style.display = '';
+    moodInput.focus();
+  } else {
+    moodInput.style.display = 'none';
+  }
 });
 
 document.querySelectorAll('.mode-opt').forEach(btn => {
@@ -898,6 +910,32 @@ function rgbToHsl(r, g, b) {
   return { h: h * 360, s: s * 255, l: l * 255 };
 }
 
+function hslToRgb(h, s, l) {
+  // h: 0–1, s: 0–1, l: 0–1 → {r,g,b} 0–255
+  if (s === 0) { const v = Math.round(l * 255); return [v, v, v]; }
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  const hue2rgb = t => {
+    if (t < 0) t += 1; if (t > 1) t -= 1;
+    if (t < 1/6) return p + (q - p) * 6 * t;
+    if (t < 1/2) return q;
+    if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+    return p;
+  };
+  return [hue2rgb(h + 1/3), hue2rgb(h), hue2rgb(h - 1/3)].map(v => Math.round(v * 255));
+}
+
+function getCollageTextColor() {
+  // Average the dominant hue across selected photos, then lighten to ~82% L
+  let r = 0, g = 0, b = 0;
+  for (const p of selected) { r += p.dominant.r; g += p.dominant.g; b += p.dominant.b; }
+  r /= selected.size; g /= selected.size; b /= selected.size;
+  const { h, s } = rgbToHsl(r, g, b);
+  const boostedS = Math.min((s / 255) * 1.4, 0.9);
+  const [nr, ng, nb] = hslToRgb(h / 360, Math.max(boostedS, 0.45), 0.82);
+  return `rgba(${nr}, ${ng}, ${nb}, 0.82)`;
+}
+
 function rgbToHex(r, g, b) {
   return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
 }
@@ -981,6 +1019,9 @@ function syncSelection() {
     collageBtn.disabled = count < target;
     collageBtn.textContent = count === target ? 'Create Collage' : `${count} / ${target} selected`;
   }
+
+  // Keep the mood suggestion fresh as photos are added/removed
+  if (moodToggle.checked && count > 0) moodInput.value = getMoodFromSelection();
 }
 
 // --- render ---
@@ -1133,20 +1174,14 @@ async function createCollage() {
     drawCover(collageCtx, img, x, y, cw, ch);
   }
 
-  // Save base (no mood)
-  baseDataUrl = collageCanvas.toDataURL('image/jpeg', 0.92);
+  // Draw mood overlay directly onto the collage if enabled
+  if (moodToggle.checked) {
+    await document.fonts.load('italic 700 100px "Playfair Display"');
+    const word = moodInput.value.trim() || getMoodFromSelection();
+    drawMoodOverlay(collageCtx, W, H, word);
+  }
 
-  // Detect mood and pre-render the overlay version
-  const mood = getMoodFromSelection();
-  moodWordEl.textContent = mood;
-  drawMoodOverlay(collageCtx, W, H, mood);
-  moodDataUrl = collageCanvas.toDataURL('image/jpeg', 0.92);
-
-  // Reset toggle to off each time a new collage is built
-  moodToggle.checked = false;
-  moodEnabled = false;
-
-  collagePreview.src = baseDataUrl;
+  collagePreview.src = collageCanvas.toDataURL('image/jpeg', 0.92);
   collageModal.classList.add('open');
 
   collageBtn.disabled = false;
@@ -1169,22 +1204,27 @@ function getMoodFromSelection() {
 function drawMoodOverlay(ctx, W, H, word) {
   ctx.save();
   ctx.translate(W / 2, H / 2);
-  // Rotate along the canvas diagonal (bottom-left → top-right)
-  ctx.rotate(-Math.atan2(H, W));
+  ctx.rotate(-35 * Math.PI / 180);
 
   const text = word.toUpperCase();
   const diagonal = Math.sqrt(W * W + H * H);
 
-  // Measure at reference size, then scale to span ~75% of the diagonal
+  // Scale font so the word spans ~72% of the canvas diagonal
   const refSize = 300;
-  ctx.font = `200 ${refSize}px Georgia, 'Times New Roman', serif`;
+  ctx.font = `italic 700 ${refSize}px "Playfair Display", Georgia, serif`;
   const refWidth = ctx.measureText(text).width;
-  const fontSize = Math.floor(refSize * (diagonal * 0.75) / refWidth);
+  const fontSize = Math.floor(refSize * (diagonal * 0.72) / refWidth);
 
-  ctx.font = `200 ${fontSize}px Georgia, 'Times New Roman', serif`;
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.20)';
+  ctx.font = `italic 700 ${fontSize}px "Playfair Display", Georgia, serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
+
+  ctx.shadowColor   = 'rgba(0, 0, 0, 0.4)';
+  ctx.shadowBlur    = Math.round(fontSize * 0.06);
+  ctx.shadowOffsetX = Math.round(fontSize * 0.02);
+  ctx.shadowOffsetY = Math.round(fontSize * 0.02);
+
+  ctx.fillStyle = getCollageTextColor();
   ctx.fillText(text, 0, 0);
   ctx.restore();
 }
@@ -1218,7 +1258,7 @@ function drawCover(ctx, img, x, y, w, h) {
 function downloadCollage() {
   const a = document.createElement('a');
   a.download = 'collage.jpg';
-  a.href = moodEnabled ? moodDataUrl : baseDataUrl;
+  a.href = collageCanvas.toDataURL('image/jpeg', 0.92);
   a.click();
 }
 </script>
