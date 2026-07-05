@@ -583,6 +583,43 @@
 
   .switch input:checked + .slider { background: #4a7bff; }
   .switch input:checked + .slider::before { transform: translateX(20px); }
+
+  /* Mood checkbox in header */
+  .mood-check-label {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 13px;
+    color: #555;
+    cursor: pointer;
+    white-space: nowrap;
+    user-select: none;
+  }
+
+  .mood-check-label input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: #4a7bff;
+    flex-shrink: 0;
+  }
+
+  /* Mood word in modal (no toggle needed there) */
+  .mood-display {
+    font-size: 13px;
+    color: rgba(255,255,255,0.6);
+    letter-spacing: 0.3px;
+  }
+
+  .mood-display strong {
+    color: #fff;
+    font-style: italic;
+    font-size: 15px;
+  }
+
+  @media (max-width: 640px) {
+    .mood-check-label { font-size: 12px; gap: 6px; }
+  }
 </style>
 </head>
 <body>
@@ -605,6 +642,10 @@
         <button class="mode-opt active" data-n="4">4 photos</button>
         <button class="mode-opt" data-n="6">6 photos</button>
       </div>
+      <label class="mood-check-label">
+        <input type="checkbox" id="mood-toggle">
+        Add mood text
+      </label>
       <button class="collage-btn" id="collage-btn" style="display:none" disabled>0 / 4 selected</button>
     </div>
   </div>
@@ -630,19 +671,7 @@
 
 <div id="collage-modal">
   <img id="collage-preview" alt="Collage preview">
-  <div class="mood-row">
-    <div class="mood-info">
-      <span class="mood-label-text">Mood</span>
-      <span id="mood-word">—</span>
-    </div>
-    <div class="mood-switch-wrap">
-      <label class="switch">
-        <input type="checkbox" id="mood-toggle">
-        <span class="slider"></span>
-      </label>
-      <span class="mood-switch-caption">Add to collage</span>
-    </div>
-  </div>
+  <div class="mood-display">Mood: <strong id="mood-word">—</strong></div>
   <div class="modal-actions">
     <button class="download-btn" id="download-btn">Download JPG</button>
     <button class="modal-close" id="modal-close">Close</button>
