@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Color Grouper</title>
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#4a7bff">
+<link rel="apple-touch-icon" href="icon.svg">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Color Grouper">
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #f5f5f5;
+    color: #1a1a1a;
+    min-height: 100vh;
+  }
+
+  header {
+    background: #fff;
+    border-bottom: 1px solid #e0e0e0;
+    padding: 18px 32px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  header h1 {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+  }
+
+  header .count {
+    font-size: 13px;
+    color: #888;
+  }
+
+  .controls {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .controls label {
+    font-size: 13px;
+    color: #555;
+  }
+
+  select {
+    font-size: 13px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 5px 10px;
+    background: #fff;
+    cursor: pointer;
+    outline: none;
+  }
+
+  button.clear-btn {
+    font-size: 13px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 5px 12px;
+    background: #fff;
+    cursor: pointer;
+    color: #555;
+    transition: background 0.15s;
+  }
+
+  button.clear-btn:hover { background: #f0f0f0; }
+
+  main { padding: 32px; }
+
+  #drop-zone {
+    border: 2px dashed #ccc;
+    border-radius: 12px;
+    background: #fff;
+    text-align: center;
+    padding: 56px 32px;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    user-select: none;
+  }
+
+  #drop-zone.drag-over {
+    border-color: #4a7bff;
+    background: #f0f5ff;
+  }
+
+  #drop-zone .icon {
+    font-size: 40px;
+    margin-bottom: 12px;
+    opacity: 0.5;
+  }
+
+  #drop-zone p {
+    font-size: 15px;
+    color: #666;
+    margin-bottom: 6px;
+  }
+
+  #drop-zone small {
+    font-size: 12px;
+    color: #aaa;
+  }
+
+  #file-input { display: none; }
+
+  #status {
+    text-align: center;
+    padding: 16px;
+    font-size: 13px;
+    color: #888;
+    display: none;
+  }
+
+  #groups { margin-top: 0; }
+
+  .group {
+    margin-bottom: 40px;
+  }
+
+  .group-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+
+  .group-swatch {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 2px solid rgba(0,0,0,0.08);
+    flex-shrink: 0;
+  }
+
+  .group-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+  }
+
+  .group-count {
+    font-size: 12px;
+    color: #999;
+  }
+
+  .photo-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px;
+  }
+
+  .photo-card {
+    position: relative;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #eee;
+    aspect-ratio: 1;
+    cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+  }
+
+  .photo-card:hover {
+    transform: scale(1.03);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.14);
+    z-index: 2;
+  }
+
+  .photo-card.selected {
+    outline: 3px solid #4a7bff;
+    outline-offset: -3px;
+  }
+
+  .photo-card.dimmed { opacity: 0.35; }
+
+  .photo-card .check {
+    display: none;
+    position: absolute;
+    top: 7px;
+    right: 7px;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: #4a7bff;
+    color: #fff;
+    font-size: 15px;
+    line-height: 26px;
+    text-align: center;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.35);
+    z-index: 3;
+  }
+
+  .photo-card.selected .check { display: block; }
+
+  .photo-card img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .photo-card .palette-strip {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 18px;
+    display: flex;
+  }
+
+  .palette-strip span {
+    flex: 1;
+  }
+
+  .photo-card .filename {
+    display: none;
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    background: rgba(0,0,0,0.55);
+    color: #fff;
+    font-size: 10px;
+    padding: 4px 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .photo-card:hover .filename { display: block; }
+
+  canvas { display: none; }
+
+  button.collage-btn {
+    font-size: 13px;
+    font-weight: 600;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 16px;
+    background: #4a7bff;
+    color: #fff;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  button.collage-btn:hover:not(:disabled) { background: #2f5fe0; }
+
+  button.collage-btn:disabled {
+    background: #c0c8e0;
+    color: #fff;
+    cursor: default;
+  }
+
+  #collage-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.8);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  #collage-modal.open { display: flex; }
+
+  #collage-preview {
+    max-height: 80vh;
+    width: auto;
+    border-radius: 8px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+    display: block;
+  }
+
+  .modal-actions { display: flex; gap: 10px; }
+
+  button.download-btn {
+    font-size: 14px;
+    font-weight: 600;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 24px;
+    background: #4a7bff;
+    color: #fff;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  button.download-btn:hover { background: #2f5fe0; }
+
+  button.modal-close {
+    font-size: 14px;
+    border: 1px solid rgba(255,255,255,0.35);
+    border-radius: 8px;
+    padding: 10px 20px;
+    background: transparent;
+    color: #fff;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  button.modal-close:hover { background: rgba(255,255,255,0.12); }
+
+  .mode-toggle {
+    display: flex;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .mode-opt {
+    font-size: 13px;
+    padding: 5px 12px;
+    border: none;
+    background: #fff;
+    cursor: pointer;
+    color: #666;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .mode-opt + .mode-opt { border-left: 1px solid #ddd; }
+
+  .mode-opt.active {
+    background: #4a7bff;
+    color: #fff;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Color Grouper</h1>
+  <span class="count" id="photo-count"></span>
+  <div class="controls">
+    <label for="group-mode">Group by</label>
+    <select id="group-mode">
+      <option value="hue">Hue (color family)</option>
+      <option value="brightness">Brightness</option>
+      <option value="saturation">Saturation</option>
+    </select>
+    <div class="mode-toggle">
+      <button class="mode-opt active" data-n="4">4 photos</button>
+      <button class="mode-opt" data-n="6">6 photos</button>
+    </div>
+    <button class="collage-btn" id="collage-btn" style="display:none" disabled>0 / 4 selected</button>
+    <button class="clear-btn" id="clear-btn">Clear all</button>
+  </div>
+</header>
+
+<main>
+  <div id="drop-zone">
+    <div class="icon">🖼️</div>
+    <p>Drag &amp; drop photos here</p>
+    <small>or click to browse</small>
+  </div>
+  <input type="file" id="file-input" accept="image/*" multiple>
+  <div id="status">Analyzing colors…</div>
+  <div id="groups"></div>
+</main>
+
+<canvas id="canvas"></canvas>
+<canvas id="collage-canvas"></canvas>
+
+<div id="collage-modal">
+  <img id="collage-preview" alt="Collage preview">
+  <div class="modal-actions">
+    <button class="download-btn" id="download-btn">Download JPG</button>
+    <button class="modal-close" id="modal-close">Close</button>
+  </div>
+</div>
+
+<script>
+const SAMPLE_SIZE = 80;
+
+const HUE_GROUPS = [
+  { name: 'Reds',             hue: [0, 15],    color: '#d93030' },
+  { name: 'Oranges',          hue: [15, 45],   color: '#e07030' },
+  { name: 'Yellows',          hue: [45, 70],   color: '#c8a800' },
+  { name: 'Greens',           hue: [70, 160],  color: '#38a046' },
+  { name: 'Cyans',            hue: [160, 200], color: '#20a8b8' },
+  { name: 'Blues',            hue: [200, 255], color: '#3060d0' },
+  { name: 'Purples',          hue: [255, 310], color: '#8040c0' },
+  { name: 'Pinks',            hue: [310, 345], color: '#d040a0' },
+  { name: 'Browns / Beige',   hue: null,       color: '#9a7050' },
+  { name: 'Grays / Neutrals', hue: null,       color: '#909090' },
+];
+
+const BRIGHTNESS_GROUPS = [
+  { name: 'Dark',   range: [0,   85],  color: '#2a2a2a' },
+  { name: 'Mid',    range: [85,  170], color: '#888' },
+  { name: 'Light',  range: [170, 256], color: '#d8d8d8' },
+];
+
+const SATURATION_GROUPS = [
+  { name: 'Muted / Desaturated', range: [0,   80],  color: '#aaa' },
+  { name: 'Moderate',            range: [80,  160],  color: '#7a9' },
+  { name: 'Vivid / Saturated',   range: [160, 256],  color: '#f55' },
+];
+
+// --- state ---
+let photos = [];
+let selected = new Set();
+let collageMode = 4;
+
+// --- DOM ---
+const dropZone       = document.getElementById('drop-zone');
+const fileInput      = document.getElementById('file-input');
+const status         = document.getElementById('status');
+const groups         = document.getElementById('groups');
+const canvas         = document.getElementById('canvas');
+const ctx            = canvas.getContext('2d');
+const countEl        = document.getElementById('photo-count');
+const modeEl         = document.getElementById('group-mode');
+const clearBtn       = document.getElementById('clear-btn');
+const collageBtn     = document.getElementById('collage-btn');
+const collageModal   = document.getElementById('collage-modal');
+const collagePreview = document.getElementById('collage-preview');
+const downloadBtn    = document.getElementById('download-btn');
+const modalClose     = document.getElementById('modal-close');
+const collageCanvas  = document.getElementById('collage-canvas');
+const collageCtx     = collageCanvas.getContext('2d');
+
+// --- drag & drop ---
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  handleFiles([...e.dataTransfer.files]);
+});
+fileInput.addEventListener('change', () => handleFiles([...fileInput.files]));
+
+modeEl.addEventListener('change', render);
+clearBtn.addEventListener('click', clearAll);
+collageBtn.addEventListener('click', createCollage);
+downloadBtn.addEventListener('click', downloadCollage);
+modalClose.addEventListener('click', () => collageModal.classList.remove('open'));
+collageModal.addEventListener('click', e => { if (e.target === collageModal) collageModal.classList.remove('open'); });
+
+document.querySelectorAll('.mode-opt').forEach(btn => {
+  btn.addEventListener('click', () => {
+    collageMode = parseInt(btn.dataset.n, 10);
+    document.querySelectorAll('.mode-opt').forEach(b => b.classList.toggle('active', b === btn));
+    selected.clear();
+    syncSelection();
+  });
+});
+
+// --- file handling ---
+async function handleFiles(files) {
+  const toAdd = files.filter(f => f.type.startsWith('image/'));
+  if (!toAdd.length) return;
+
+  dropZone.style.display = 'none';
+  status.style.display = 'block';
+  status.textContent = `Analyzing ${toAdd.length} photo${toAdd.length > 1 ? 's' : ''}…`;
+
+  for (const file of toAdd) {
+    const entry = await analyzeFile(file);
+    photos.push(entry);
+  }
+
+  status.style.display = 'none';
+  updateCount();
+  render();
+}
+
+function analyzeFile(file) {
+  return new Promise(resolve => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      canvas.width  = SAMPLE_SIZE;
+      canvas.height = SAMPLE_SIZE;
+      ctx.drawImage(img, 0, 0, SAMPLE_SIZE, SAMPLE_SIZE);
+      const data = ctx.getImageData(0, 0, SAMPLE_SIZE, SAMPLE_SIZE).data;
+      const palette = extractPalette(data, 6);
+      const dominant = findVibrantDominant(palette);
+      const hsl = rgbToHsl(dominant.r, dominant.g, dominant.b);
+      resolve({ file, url, dominant, palette, hsl });
+    };
+    img.src = url;
+  });
+}
+
+function findVibrantDominant(palette) {
+  const candidates = palette.slice(0, Math.min(4, palette.length));
+  let best = palette[0], bestScore = -1;
+  for (const p of candidates) {
+    const { s, l } = rgbToHsl(p.r, p.g, p.b);
+    const score = s * ((l > 30 && l < 235) ? 1.0 : 0.25);
+    if (score > bestScore) { bestScore = score; best = p; }
+  }
+  return best;
+}
+
+function extractPalette(data, k) {
+  const pixels = [];
+  for (let i = 0; i < data.length; i += 16) {
+    if (data[i + 3] < 128) continue;
+    pixels.push([data[i], data[i + 1], data[i + 2]]);
+  }
+  if (!pixels.length) return Array(k).fill({ r: 128, g: 128, b: 128 });
+
+  let centroids = [];
+  for (let i = 0; i < k; i++) {
+    centroids.push([...pixels[Math.floor((i / k) * pixels.length)]]);
+  }
+
+  for (let iter = 0; iter < 4; iter++) {
+    const buckets = Array.from({ length: k }, () => []);
+    for (const p of pixels) {
+      let best = 0, bestD = Infinity;
+      for (let j = 0; j < k; j++) {
+        const d = colorDist(p, centroids[j]);
+        if (d < bestD) { bestD = d; best = j; }
+      }
+      buckets[best].push(p);
+    }
+    centroids = buckets.map((b, j) => {
+      if (!b.length) return centroids[j];
+      const avg = [0, 0, 0];
+      for (const p of b) { avg[0] += p[0]; avg[1] += p[1]; avg[2] += p[2]; }
+      return avg.map(v => Math.round(v / b.length));
+    });
+  }
+
+  const counts = Array.from({ length: k }, () => 0);
+  for (const p of pixels) {
+    let best = 0, bestD = Infinity;
+    for (let j = 0; j < k; j++) {
+      const d = colorDist(p, centroids[j]);
+      if (d < bestD) { bestD = d; best = j; }
+    }
+    counts[best]++;
+  }
+
+  return centroids
+    .map((c, i) => ({ c, count: counts[i] }))
+    .sort((a, b) => b.count - a.count)
+    .map(x => ({ r: x.c[0], g: x.c[1], b: x.c[2] }));
+}
+
+function colorDist(a, b) {
+  return (a[0]-b[0])**2 + (a[1]-b[1])**2 + (a[2]-b[2])**2;
+}
+
+function rgbToHsl(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h, s, l = (max + min) / 2;
+  if (max === min) {
+    h = s = 0;
+  } else {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+      case g: h = ((b - r) / d + 2) / 6; break;
+      case b: h = ((r - g) / d + 4) / 6; break;
+    }
+  }
+  return { h: h * 360, s: s * 255, l: l * 255 };
+}
+
+function rgbToHex(r, g, b) {
+  return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
+}
+
+// --- grouping ---
+function getGroupKey(photo) {
+  const mode = modeEl.value;
+  const { h, s, l } = photo.hsl;
+
+  if (mode === 'hue') {
+    if (s < 20 || l < 15 || l > 240) return 'Grays / Neutrals';
+    if (h >= 15 && h < 65 && s < 130) return 'Browns / Beige';
+    if (h >= 345) return 'Reds';
+    for (const g of HUE_GROUPS) {
+      if (!g.hue) continue;
+      if (h >= g.hue[0] && h < g.hue[1]) return g.name;
+    }
+    return 'Grays / Neutrals';
+  }
+
+  if (mode === 'brightness') {
+    for (const g of BRIGHTNESS_GROUPS) {
+      if (l >= g.range[0] && l < g.range[1]) return g.name;
+    }
+    return BRIGHTNESS_GROUPS[2].name;
+  }
+
+  if (mode === 'saturation') {
+    for (const g of SATURATION_GROUPS) {
+      if (s >= g.range[0] && s < g.range[1]) return g.name;
+    }
+    return SATURATION_GROUPS[2].name;
+  }
+}
+
+function getGroupColor(key) {
+  for (const g of [...HUE_GROUPS, ...BRIGHTNESS_GROUPS, ...SATURATION_GROUPS]) {
+    if (g.name === key) return g.color;
+  }
+  return '#999';
+}
+
+function getGroupOrder(key) {
+  const mode = modeEl.value;
+  const list = mode === 'hue' ? HUE_GROUPS : mode === 'brightness' ? BRIGHTNESS_GROUPS : SATURATION_GROUPS;
+  const idx = list.findIndex(g => g.name === key);
+  return idx === -1 ? 999 : idx;
+}
+
+// --- selection ---
+function toggleSelect(photo) {
+  if (selected.has(photo)) {
+    selected.delete(photo);
+  } else if (selected.size < collageMode) {
+    selected.add(photo);
+  }
+  syncSelection();
+}
+
+function syncSelection() {
+  const count = selected.size;
+  const target = collageMode;
+  document.querySelectorAll('.photo-card').forEach(card => {
+    const photo = card._photo;
+    if (!photo) return;
+    if (selected.has(photo)) {
+      card.classList.add('selected');
+      card.classList.remove('dimmed');
+    } else if (count === target) {
+      card.classList.remove('selected');
+      card.classList.add('dimmed');
+    } else {
+      card.classList.remove('selected', 'dimmed');
+    }
+  });
+
+  if (count === 0) {
+    collageBtn.style.display = 'none';
+  } else {
+    collageBtn.style.display = '';
+    collageBtn.disabled = count < target;
+    collageBtn.textContent = count === target ? 'Create Collage' : `${count} / ${target} selected`;
+  }
+}
+
+// --- render ---
+function render() {
+  if (!photos.length) {
+    dropZone.style.display = '';
+    groups.innerHTML = '';
+    return;
+  }
+
+  const map = new Map();
+  for (const photo of photos) {
+    const key = getGroupKey(photo);
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(photo);
+  }
+
+  const sortedKeys = [...map.keys()].sort((a, b) => getGroupOrder(a) - getGroupOrder(b));
+
+  groups.innerHTML = '';
+  for (const key of sortedKeys) {
+    const groupPhotos = map.get(key);
+    const groupEl = document.createElement('div');
+    groupEl.className = 'group';
+
+    const hdr = document.createElement('div');
+    hdr.className = 'group-header';
+
+    const swatch = document.createElement('div');
+    swatch.className = 'group-swatch';
+    swatch.style.background = getGroupColor(key);
+
+    const label = document.createElement('span');
+    label.className = 'group-label';
+    label.textContent = key;
+
+    const count = document.createElement('span');
+    count.className = 'group-count';
+    count.textContent = `${groupPhotos.length} photo${groupPhotos.length > 1 ? 's' : ''}`;
+
+    hdr.append(swatch, label, count);
+
+    const grid = document.createElement('div');
+    grid.className = 'photo-grid';
+
+    for (const photo of groupPhotos) {
+      const card = document.createElement('div');
+      card.className = 'photo-card';
+      card._photo = photo;
+      if (selected.has(photo)) card.classList.add('selected');
+      else if (selected.size === collageMode) card.classList.add('dimmed');
+      card.addEventListener('click', () => toggleSelect(photo));
+
+      const img = document.createElement('img');
+      img.src = photo.url;
+      img.alt = photo.file.name;
+      img.loading = 'lazy';
+
+      const check = document.createElement('div');
+      check.className = 'check';
+      check.textContent = '✓';
+
+      const strip = document.createElement('div');
+      strip.className = 'palette-strip';
+      for (const c of photo.palette) {
+        const s = document.createElement('span');
+        s.style.background = rgbToHex(c.r, c.g, c.b);
+        strip.appendChild(s);
+      }
+
+      const fn = document.createElement('div');
+      fn.className = 'filename';
+      fn.textContent = photo.file.name;
+
+      card.append(img, check, strip, fn);
+      grid.appendChild(card);
+    }
+
+    groupEl.append(hdr, grid);
+    groups.appendChild(groupEl);
+  }
+}
+
+function updateCount() {
+  countEl.textContent = photos.length ? `${photos.length} photos` : '';
+}
+
+function clearAll() {
+  photos.forEach(p => URL.revokeObjectURL(p.url));
+  photos = [];
+  selected.clear();
+  groups.innerHTML = '';
+  fileInput.value = '';
+  dropZone.style.display = '';
+  countEl.textContent = '';
+  collageBtn.style.display = 'none';
+}
+
+// --- collage builder ---
+async function createCollage() {
+  const sel = [...selected];
+  if (sel.length !== collageMode) return;
+
+  collageBtn.disabled = true;
+  collageBtn.textContent = 'Building…';
+
+  const W = 1080, H = 1920;
+  collageCanvas.width  = W;
+  collageCanvas.height = H;
+  collageCtx.fillStyle = '#000';
+  collageCtx.fillRect(0, 0, W, H);
+
+  let positions, cw, ch;
+  if (collageMode === 4) {
+    cw = W / 2; ch = H / 2;
+    positions = [[0, 0], [cw, 0], [0, ch], [cw, ch]];
+  } else {
+    cw = W / 2; ch = H / 3;
+    positions = [
+      [0,  0    ], [cw, 0    ],
+      [0,  ch   ], [cw, ch   ],
+      [0,  ch*2 ], [cw, ch*2 ],
+    ];
+  }
+
+  for (let i = 0; i < sel.length; i++) {
+    const img = await loadImage(sel[i].url);
+    const [x, y] = positions[i];
+    drawCover(collageCtx, img, x, y, cw, ch);
+  }
+
+  collagePreview.src = collageCanvas.toDataURL('image/jpeg', 0.92);
+  collageModal.classList.add('open');
+
+  collageBtn.disabled = false;
+  collageBtn.textContent = 'Create Collage';
+}
+
+function loadImage(src) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.src = src;
+  });
+}
+
+function drawCover(ctx, img, x, y, w, h) {
+  const ir = img.naturalWidth / img.naturalHeight;
+  const cr = w / h;
+  let sx, sy, sw, sh;
+  if (ir > cr) {
+    sh = img.naturalHeight;
+    sw = sh * cr;
+    sx = (img.naturalWidth - sw) / 2;
+    sy = 0;
+  } else {
+    sw = img.naturalWidth;
+    sh = sw / cr;
+    sx = 0;
+    sy = (img.naturalHeight - sh) / 2;
+  }
+  ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
+}
+
+function downloadCollage() {
+  const a = document.createElement('a');
+  a.download = 'collage.jpg';
+  a.href = collageCanvas.toDataURL('image/jpeg', 0.92);
+  a.click();
+}
+</script>
+
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js');
+  }
+</script>
+</body>
+</html>
