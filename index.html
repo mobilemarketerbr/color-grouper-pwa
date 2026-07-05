@@ -502,6 +502,87 @@
   @media (max-width: 390px) {
     .photo-grid { grid-template-columns: repeat(3, 1fr); gap: 4px; }
   }
+
+  /* ── Mood row ─────────────────────────────────────────── */
+  .mood-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(255,255,255,0.08);
+    border-radius: 10px;
+    padding: 12px 16px;
+    width: 100%;
+    max-width: 340px;
+    gap: 16px;
+  }
+
+  .mood-info {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .mood-label-text {
+    font-size: 10px;
+    color: rgba(255,255,255,0.45);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+
+  #mood-word {
+    font-size: 18px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 0.5px;
+    font-style: italic;
+  }
+
+  .mood-switch-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .mood-switch-caption {
+    font-size: 10px;
+    color: rgba(255,255,255,0.45);
+    white-space: nowrap;
+  }
+
+  .switch {
+    position: relative;
+    width: 46px;
+    height: 26px;
+  }
+
+  .switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+
+  .slider {
+    position: absolute;
+    inset: 0;
+    background: rgba(255,255,255,0.22);
+    border-radius: 26px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .slider::before {
+    content: '';
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    left: 3px;
+    top: 3px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.2s;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  }
+
+  .switch input:checked + .slider { background: #4a7bff; }
+  .switch input:checked + .slider::before { transform: translateX(20px); }
 </style>
 </head>
 <body>
@@ -549,6 +630,19 @@
 
 <div id="collage-modal">
   <img id="collage-preview" alt="Collage preview">
+  <div class="mood-row">
+    <div class="mood-info">
+      <span class="mood-label-text">Mood</span>
+      <span id="mood-word">—</span>
+    </div>
+    <div class="mood-switch-wrap">
+      <label class="switch">
+        <input type="checkbox" id="mood-toggle">
+        <span class="slider"></span>
+      </label>
+      <span class="mood-switch-caption">Add to collage</span>
+    </div>
+  </div>
   <div class="modal-actions">
     <button class="download-btn" id="download-btn">Download JPG</button>
     <button class="modal-close" id="modal-close">Close</button>
@@ -583,10 +677,26 @@ const SATURATION_GROUPS = [
   { name: 'Vivid / Saturated',   range: [160, 256],  color: '#f55' },
 ];
 
+const MOOD_MAP = {
+  'Reds':             'Energy',
+  'Oranges':          'Joy',
+  'Yellows':          'Optimism',
+  'Greens':           'Growth',
+  'Cyans':            'Calm',
+  'Blues':            'Calm',
+  'Purples':          'Mystery',
+  'Pinks':            'Romance',
+  'Browns / Beige':   'Comfort',
+  'Grays / Neutrals': 'Melancholy',
+};
+
 // --- state ---
 let photos = [];
 let selected = new Set();
-let collageMode = 4;
+let collageMode  = 4;
+let moodEnabled  = false;
+let baseDataUrl  = null; // collage without mood overlay
+let moodDataUrl  = null; // collage with mood overlay
 
 // --- DOM ---
 const dropZone       = document.getElementById('drop-zone');
@@ -606,6 +716,8 @@ const downloadBtn    = document.getElementById('download-btn');
 const modalClose     = document.getElementById('modal-close');
 const collageCanvas  = document.getElementById('collage-canvas');
 const collageCtx     = collageCanvas.getContext('2d');
+const moodToggle     = document.getElementById('mood-toggle');
+const moodWordEl     = document.getElementById('mood-word');
 
 // --- drag & drop + pickers ---
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
@@ -626,6 +738,10 @@ collageBtn.addEventListener('click', createCollage);
 downloadBtn.addEventListener('click', downloadCollage);
 modalClose.addEventListener('click', () => collageModal.classList.remove('open'));
 collageModal.addEventListener('click', e => { if (e.target === collageModal) collageModal.classList.remove('open'); });
+moodToggle.addEventListener('change', () => {
+  moodEnabled = moodToggle.checked;
+  if (baseDataUrl) collagePreview.src = moodEnabled ? moodDataUrl : baseDataUrl;
+});
 
 document.querySelectorAll('.mode-opt').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -988,11 +1104,60 @@ async function createCollage() {
     drawCover(collageCtx, img, x, y, cw, ch);
   }
 
-  collagePreview.src = collageCanvas.toDataURL('image/jpeg', 0.92);
+  // Save base (no mood)
+  baseDataUrl = collageCanvas.toDataURL('image/jpeg', 0.92);
+
+  // Detect mood and pre-render the overlay version
+  const mood = getMoodFromSelection();
+  moodWordEl.textContent = mood;
+  drawMoodOverlay(collageCtx, W, H, mood);
+  moodDataUrl = collageCanvas.toDataURL('image/jpeg', 0.92);
+
+  // Reset toggle to off each time a new collage is built
+  moodToggle.checked = false;
+  moodEnabled = false;
+
+  collagePreview.src = baseDataUrl;
   collageModal.classList.add('open');
 
   collageBtn.disabled = false;
   collageBtn.textContent = 'Create Collage';
+}
+
+function getMoodFromSelection() {
+  const counts = new Map();
+  for (const photo of selected) {
+    const key = getGroupKey(photo);
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  let topGroup = 'Grays / Neutrals', topCount = 0;
+  for (const [key, n] of counts) {
+    if (n > topCount) { topCount = n; topGroup = key; }
+  }
+  return MOOD_MAP[topGroup] || 'Serenity';
+}
+
+function drawMoodOverlay(ctx, W, H, word) {
+  ctx.save();
+  ctx.translate(W / 2, H / 2);
+  // Rotate along the canvas diagonal (bottom-left → top-right)
+  ctx.rotate(-Math.atan2(H, W));
+
+  const text = word.toUpperCase();
+  const diagonal = Math.sqrt(W * W + H * H);
+
+  // Measure at reference size, then scale to span ~75% of the diagonal
+  const refSize = 300;
+  ctx.font = `200 ${refSize}px Georgia, 'Times New Roman', serif`;
+  const refWidth = ctx.measureText(text).width;
+  const fontSize = Math.floor(refSize * (diagonal * 0.75) / refWidth);
+
+  ctx.font = `200 ${fontSize}px Georgia, 'Times New Roman', serif`;
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.20)';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, 0, 0);
+  ctx.restore();
 }
 
 function loadImage(src) {
@@ -1024,7 +1189,7 @@ function drawCover(ctx, img, x, y, w, h) {
 function downloadCollage() {
   const a = document.createElement('a');
   a.download = 'collage.jpg';
-  a.href = collageCanvas.toDataURL('image/jpeg', 0.92);
+  a.href = moodEnabled ? moodDataUrl : baseDataUrl;
   a.click();
 }
 </script>
