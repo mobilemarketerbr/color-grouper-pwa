@@ -611,24 +611,24 @@
 
   #mood-input {
     display: none;
-    width: 88px;
     font-size: 13px;
     font-style: italic;
     font-family: Georgia, 'Times New Roman', serif;
-    border: none;
-    border-bottom: 1.5px solid #bbb;
-    background: transparent;
+    border: 1.5px solid #bbb;
+    border-radius: 6px;
+    background: #fff;
     color: #222;
-    padding: 1px 3px;
+    padding: 3px 6px;
     outline: none;
+    cursor: pointer;
     transition: border-color 0.15s;
   }
 
-  #mood-input:focus { border-bottom-color: #4a7bff; }
+  #mood-input:focus { border-color: #4a7bff; }
 
   @media (max-width: 640px) {
     .mood-check-label { font-size: 12px; gap: 6px; }
-    #mood-input { width: 72px; font-size: 12px; }
+    #mood-input { font-size: 12px; }
   }
 </style>
 </head>
@@ -656,7 +656,18 @@
         <input type="checkbox" id="mood-toggle">
         Add mood
       </label>
-      <input type="text" id="mood-input" placeholder="word…" maxlength="20">
+      <select id="mood-input">
+        <option>Joy</option>
+        <option>Calm</option>
+        <option>Energy</option>
+        <option>Melancholy</option>
+        <option>Romance</option>
+        <option>Growth</option>
+        <option>Comfort</option>
+        <option>Optimism</option>
+        <option>Nostalgia</option>
+        <option>Mystery</option>
+      </select>
       <button class="collage-btn" id="collage-btn" style="display:none" disabled>0 / 4 selected</button>
     </div>
   </div>
@@ -778,7 +789,6 @@ moodToggle.addEventListener('change', () => {
   if (moodToggle.checked) {
     moodInput.value = getMoodFromSelection();
     moodInput.style.display = '';
-    moodInput.focus();
   } else {
     moodInput.style.display = 'none';
   }
@@ -1177,7 +1187,7 @@ async function createCollage() {
   // Draw mood overlay directly onto the collage if enabled
   if (moodToggle.checked) {
     await document.fonts.load('italic 700 100px "Playfair Display"');
-    const word = moodInput.value.trim() || getMoodFromSelection();
+    const word = moodInput.value || getMoodFromSelection();
     drawMoodOverlay(collageCtx, W, H, word);
   }
 
@@ -1198,22 +1208,24 @@ function getMoodFromSelection() {
   for (const [key, n] of counts) {
     if (n > topCount) { topCount = n; topGroup = key; }
   }
-  return MOOD_MAP[topGroup] || 'Serenity';
+  return MOOD_MAP[topGroup] || 'Calm';
 }
 
 function drawMoodOverlay(ctx, W, H, word) {
   ctx.save();
   ctx.translate(W / 2, H / 2);
-  ctx.rotate(-35 * Math.PI / 180);
+  const ANGLE = 35 * Math.PI / 180;
+  ctx.rotate(-ANGLE);
 
   const text = word.toUpperCase();
-  const diagonal = Math.sqrt(W * W + H * H);
 
-  // Scale font so the word spans ~72% of the canvas diagonal
+  // At -35° the visible span through canvas center is W / cos(35°) ≈ 1318px for 1080px wide.
+  // Size the text to 80% of that span so the full word fits without clipping.
+  const span = W / Math.cos(ANGLE);
   const refSize = 300;
   ctx.font = `italic 700 ${refSize}px "Playfair Display", Georgia, serif`;
   const refWidth = ctx.measureText(text).width;
-  const fontSize = Math.floor(refSize * (diagonal * 0.72) / refWidth);
+  const fontSize = Math.floor(refSize * (span * 0.80) / refWidth);
 
   ctx.font = `italic 700 ${fontSize}px "Playfair Display", Georgia, serif`;
   ctx.textAlign = 'center';
