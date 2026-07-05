@@ -1,4 +1,4 @@
-const CACHE = 'color-grouper-v1';
+const CACHE = 'color-grouper-v2';
 const SHELL = [
   './',
   './index.html',
