@@ -53,6 +53,10 @@
     gap: 12px;
   }
 
+  /* On desktop, ctrl-row is invisible — its children participate directly
+     in the .controls flex row, exactly as before. */
+  .ctrl-row { display: contents; }
+
   .controls label {
     font-size: 13px;
     color: #555;
@@ -339,6 +343,27 @@
     color: #fff;
   }
 
+  .pick-btns {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 14px;
+    flex-wrap: wrap;
+  }
+
+  .pick-btn {
+    font-size: 13px;
+    border: 1px solid #ddd;
+    border-radius: 7px;
+    padding: 8px 20px;
+    background: #fff;
+    cursor: pointer;
+    color: #555;
+    transition: border-color 0.15s, color 0.15s;
+  }
+
+  .pick-btn:hover { border-color: #4a7bff; color: #4a7bff; }
+
   .select-all-btn {
     margin-left: auto;
     font-size: 12px;
@@ -382,18 +407,26 @@
 
     header h1 { font-size: 16px; }
 
-    /* Controls wrap to a second full-width row */
+    /* Controls drop to a full-width second line */
     .controls {
       margin-left: 0;
       width: 100%;
-      flex-wrap: wrap;
+      flex-direction: column;
+      align-items: stretch;
       gap: 8px;
     }
 
-    /* "Group by" label wastes space on mobile */
+    /* Each ctrl-row becomes a real flex row on mobile */
+    .ctrl-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
     .controls label { display: none; }
 
-    select {
+    /* Row 1: [select ──────────] [Clear all] */
+    .ctrl-row:first-child select {
       flex: 1;
       min-width: 0;
       font-size: 14px;
@@ -401,17 +434,19 @@
       min-height: 40px;
     }
 
-    .mode-toggle { flex-shrink: 0; }
+    /* Row 2: [4 photos | 6 photos] [Create Collage] */
+    .ctrl-row:last-child .mode-toggle { flex: 1; }
+    .ctrl-row:last-child button.collage-btn { flex: 1; }
 
     .mode-opt {
-      padding: 9px 11px;
+      flex: 1;
+      padding: 9px 8px;
       font-size: 13px;
       min-height: 40px;
+      text-align: center;
     }
 
-    /* Collage button stretches to fill remaining row space */
     button.collage-btn {
-      flex: 1;
       min-height: 40px;
       font-size: 13px;
       padding: 9px 12px;
@@ -421,6 +456,7 @@
       min-height: 40px;
       font-size: 13px;
       padding: 9px 14px;
+      flex-shrink: 0;
     }
 
     main {
@@ -428,11 +464,10 @@
       padding-bottom: max(16px, env(safe-area-inset-bottom));
     }
 
-    #drop-zone {
-      padding: 36px 16px;
-    }
-
+    #drop-zone { padding: 32px 16px; }
     #drop-zone .icon { font-size: 32px; margin-bottom: 8px; }
+
+    .pick-btn { padding: 10px 16px; min-height: 40px; font-size: 14px; }
 
     .photo-grid {
       grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
@@ -442,9 +477,8 @@
     .group { margin-bottom: 28px; }
     .group-header { margin-bottom: 10px; }
 
-    /* Modal ------------------------------------------------ */
+    /* Modal */
     #collage-modal { padding: 16px; gap: 14px; }
-
     #collage-preview { max-height: 62vh; }
 
     .modal-actions {
@@ -464,14 +498,9 @@
     }
   }
 
-  /* Narrow phones (≤ 390px — iPhone SE, older Androids) */
+  /* Narrow phones (≤ 390px) */
   @media (max-width: 390px) {
-    .photo-grid {
-      grid-template-columns: repeat(3, 1fr);
-      gap: 4px;
-    }
-
-    .mode-opt { padding: 9px 8px; }
+    .photo-grid { grid-template-columns: repeat(3, 1fr); gap: 4px; }
   }
 </style>
 </head>
@@ -481,18 +510,22 @@
   <h1>Color Grouper</h1>
   <span class="count" id="photo-count"></span>
   <div class="controls">
-    <label for="group-mode">Group by</label>
-    <select id="group-mode">
-      <option value="hue">Hue (color family)</option>
-      <option value="brightness">Brightness</option>
-      <option value="saturation">Saturation</option>
-    </select>
-    <div class="mode-toggle">
-      <button class="mode-opt active" data-n="4">4 photos</button>
-      <button class="mode-opt" data-n="6">6 photos</button>
+    <div class="ctrl-row">
+      <label for="group-mode">Group by</label>
+      <select id="group-mode">
+        <option value="hue">Hue (color family)</option>
+        <option value="brightness">Brightness</option>
+        <option value="saturation">Saturation</option>
+      </select>
+      <button class="clear-btn" id="clear-btn">Clear all</button>
     </div>
-    <button class="collage-btn" id="collage-btn" style="display:none" disabled>0 / 4 selected</button>
-    <button class="clear-btn" id="clear-btn">Clear all</button>
+    <div class="ctrl-row">
+      <div class="mode-toggle">
+        <button class="mode-opt active" data-n="4">4 photos</button>
+        <button class="mode-opt" data-n="6">6 photos</button>
+      </div>
+      <button class="collage-btn" id="collage-btn" style="display:none" disabled>0 / 4 selected</button>
+    </div>
   </div>
 </header>
 
@@ -500,9 +533,13 @@
   <div id="drop-zone">
     <div class="icon">🖼️</div>
     <p>Drag &amp; drop photos here</p>
-    <small>or click to browse</small>
+    <div class="pick-btns">
+      <button class="pick-btn" id="pick-files-btn">Select photos</button>
+      <button class="pick-btn" id="pick-folder-btn">Select folder</button>
+    </div>
   </div>
   <input type="file" id="file-input" accept="image/*" multiple>
+  <input type="file" id="folder-input" accept="image/*" webkitdirectory multiple>
   <div id="status">Analyzing colors…</div>
   <div id="groups"></div>
 </main>
@@ -554,6 +591,7 @@ let collageMode = 4;
 // --- DOM ---
 const dropZone       = document.getElementById('drop-zone');
 const fileInput      = document.getElementById('file-input');
+const folderInput    = document.getElementById('folder-input');
 const status         = document.getElementById('status');
 const groups         = document.getElementById('groups');
 const canvas         = document.getElementById('canvas');
@@ -569,8 +607,7 @@ const modalClose     = document.getElementById('modal-close');
 const collageCanvas  = document.getElementById('collage-canvas');
 const collageCtx     = collageCanvas.getContext('2d');
 
-// --- drag & drop ---
-dropZone.addEventListener('click', () => fileInput.click());
+// --- drag & drop + pickers ---
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
 dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
 dropZone.addEventListener('drop', e => {
@@ -578,7 +615,10 @@ dropZone.addEventListener('drop', e => {
   dropZone.classList.remove('drag-over');
   handleFiles([...e.dataTransfer.files]);
 });
+document.getElementById('pick-files-btn').addEventListener('click', () => fileInput.click());
+document.getElementById('pick-folder-btn').addEventListener('click', () => folderInput.click());
 fileInput.addEventListener('change', () => handleFiles([...fileInput.files]));
+folderInput.addEventListener('change', () => handleFiles([...folderInput.files]));
 
 modeEl.addEventListener('change', render);
 clearBtn.addEventListener('click', clearAll);
